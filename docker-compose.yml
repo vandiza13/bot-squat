@@ -1,0 +1,9 @@
+services:
+  squat-ms-bot:
+    build: .
+    container_name: squat-ms-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs

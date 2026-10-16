@@ -1,0 +1,33 @@
+{
+  "name": "squat-ms-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "init-db": "node scripts/initDb.js",
+    "sync:witel": "node scripts/syncSheets.js --witel",
+    "sync:all": "node scripts/syncSheets.js --all",
+    "pm2:start": "pm2 start ecosystem.config.js",
+    "pm2:stop": "pm2 stop ecosystem.config.js",
+    "pm2:restart": "pm2 restart ecosystem.config.js",
+    "pm2:logs": "pm2 logs squat-ms-bot",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f",
+    "deploy": "bash deploy.sh",
+    "update": "bash update.sh"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "csv-parser": "^3.2.1",
+    "dotenv": "^18.0.8",
+    "googleapis": "^178.0.0",
+    "grammy": "^1.46.0",
+    "pg": "^8.23.1"
+  }
+}

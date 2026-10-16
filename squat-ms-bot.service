@@ -1,0 +1,19 @@
+[Unit]
+Description=SquatMS Telegram Bot Service
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/squat-ms-bot
+ExecStart=/usr/bin/node index.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+# Logging
+StandardOutput=append:/home/ubuntu/squat-ms-bot/logs/systemd-out.log
+StandardError=append:/home/ubuntu/squat-ms-bot/logs/systemd-error.log
+
+[Install]
+WantedBy=multi-user.target
