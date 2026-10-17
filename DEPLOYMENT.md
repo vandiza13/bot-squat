@@ -85,8 +85,8 @@ BOT_TOKEN=your_telegram_bot_token_here
 DATABASE_URL=postgresql://postgres.your_project_ref:YOUR_PASSWORD@aws-1-ap-south-1.pooler.supabase.com:6543/postgres
 ADMIN_IDS=12345678
 GAS_WEBAPP_URL=https://script.google.com/macros/s/your_deployment_id/exec
-SPREADSHEET_ID=1lybP7L6_T9LUIM4tFCA7UhEgBEq4OllV37_g5RPhLj4
-WITEL_SPREADSHEET_ID=1Gmw6tkpM-NIz5j3tofSjOyvzWxhdm11pK4STGR-hEmc
+SPREADSHEET_ID=your_spreadsheet_id_here
+WITEL_SPREADSHEET_ID=your_witel_spreadsheet_id_here
 ```
 *(Tekan `CTRL + O`, `Enter` lalu `CTRL + X` untuk menyimpan di nano).*
 
