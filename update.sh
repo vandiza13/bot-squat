@@ -15,8 +15,8 @@ echo -e "${BLUE}🔄 Menjalankan Update Squat-MS Bot...${NC}"
 
 # 1. Pull perubahan terbaru dari Git (jika ada git repository)
 if [ -d .git ]; then
-    echo -e "${YELLOW}📥 Menarik update dari Git (git pull)...${NC}"
-    git pull
+    echo -e "${YELLOW}📥 Menarik update dari Git (git pull origin main)...${NC}"
+    git pull origin main
 else
     echo -e "${YELLOW}ℹ️ Bukan repository git, melewati git pull.${NC}"
 fi
@@ -27,7 +27,7 @@ npm install --omit=dev
 
 # 3. Restart bot di PM2
 echo -e "${YELLOW}🔁 Memuat ulang proses bot di PM2...${NC}"
-pm2 restart squat-ms-bot
+pm2 restart ecosystem.config.js || pm2 restart squat-ms-bot || pm2 restart all
 
 echo -e "\n${GREEN}✅ UPDATE SELESAI! Bot telah berjalan kembali dengan kode terbaru.${NC}"
 pm2 status
