@@ -1,9 +1,10 @@
-const { Bot, InlineKeyboard } = require('grammy');
+const { Bot, InlineKeyboard, Keyboard } = require('grammy');
 const config = require('./config');
 const {
   formatStartHelp,
   formatAdminPanel,
   formatMultipleSearchResults,
+  formatNearbyRadar,
   parseCoordinates,
   escapeHtml,
 } = require('./formatters/messageFormatter');
@@ -18,6 +19,7 @@ const {
   searchOLO,
   searchODC,
   searchGlobal,
+  searchNearby,
 } = require('./services/searchService');
 const { syncWitelKeTsel, syncAllSheetsToDb } = require('./services/syncService');
 
@@ -28,29 +30,66 @@ function createBot() {
 
   const bot = new Bot(config.botToken || 'DUMMY_TOKEN');
 
-  // Helper untuk membuat Tombol Aksi di Bawah Detail Site
+  // Helper untuk membuat Tombol Aksi di Bawah Detail Site dengan Warna
   function createSiteKeyboard(lokasiSite, lokasiOdc, odcName) {
     const kb = new InlineKeyboard();
     const siteCoords = parseCoordinates(lokasiSite);
     const odcCoords = parseCoordinates(lokasiOdc);
 
-    // 1. Tombol Lokasi Site (Google Maps)
+    // 1. Tombol Navigasi Titik Site (Warna Biru / Primary)
     if (siteCoords) {
-      kb.url('🗺️ Lokasi Site', `https://www.google.com/maps?q=${siteCoords.lat},${siteCoords.lon || siteCoords.long}`);
+      kb.url('📍 Navigasi ke Site', `https://www.google.com/maps?q=${siteCoords.lat},${siteCoords.lon || siteCoords.long}`).primary();
     }
 
-    // 2. Tombol Lokasi ODC (Google Maps) - HANYA jika koordinat ODC tersedia
+    // 2. Tombol Navigasi Titik ODC (Warna Hijau / Success) - HANYA jika koordinat ODC tersedia
     if (odcCoords) {
-      kb.url('🎛️ Lokasi ODC', `https://www.google.com/maps?q=${odcCoords.lat},${odcCoords.lon || odcCoords.long}`);
+      kb.url('🎛️ Peta Titik ODC', `https://www.google.com/maps?q=${odcCoords.lat},${odcCoords.lon || odcCoords.long}`).success();
     }
 
-    // 3. Tombol Cek Seluruh Site di ODC ini
-    if (odcName && odcName !== '-' && odcName.trim() !== '') {
+    if (siteCoords || odcCoords) {
       kb.row();
-      kb.text(`📋 Cek Isi ${odcName.trim()}`, `cek_odc:${odcName.trim()}`);
+    }
+
+    // 3. Tombol Cek Seluruh Site di ODC ini (Warna Biru / Primary)
+    if (odcName && odcName !== '-' && odcName.trim() !== '') {
+      kb.text(`📋 Cek Isi ${odcName.trim()}`, `cek_odc:${odcName.trim()}`).primary().row();
     }
 
     return kb.inline_keyboard.length > 0 ? kb : undefined;
+  }
+
+  // Helper membuat Keyboard Interaktif Hasil Radar GPS dengan Warna
+  function createNearbyKeyboard(lat, lon, sites = [], odcs = []) {
+    const kb = new InlineKeyboard();
+    const badges = {
+      TSEL: '🔴',
+      FSI: '🟠',
+      UMT: '🟡',
+      MTEL: '🟢',
+      OLO: '🔵',
+    };
+
+    // Tombol pembuka detail site terdekat (Warna Biru / Primary)
+    sites.forEach((site) => {
+      const badge = badges[site.target] || '⚪';
+      const dist = parseFloat(site.distance_m);
+      const distStr = dist < 1000 ? `${Math.round(dist)}m` : `${(dist / 1000).toFixed(1)}km`;
+      const title = `${badge} [${site.target}] ${site.site_id} (${distStr})`;
+      kb.text(title, `p:${site.target}:${site.id}`).primary().row();
+    });
+
+    // Tombol cek ODC terdekat (Warna Hijau / Success)
+    odcs.forEach((odc) => {
+      const dist = parseFloat(odc.distance_m);
+      const distStr = dist < 1000 ? `${Math.round(dist)}m` : `${(dist / 1000).toFixed(1)}km`;
+      kb.text(`🎛️ Isi ${odc.odc_name} (${distStr})`, `cek_odc:${odc.odc_name}`).success().row();
+    });
+
+    // Navigasi titik posisi (Biru) & Tutup (Merah / Danger)
+    kb.url('🗺️ Lihat Posisi di Peta', `https://www.google.com/maps?q=${lat},${lon}`).primary().row();
+    kb.text('❌ Tutup Radar', 'cancel_picker').danger();
+
+    return kb;
   }
 
   // Helper membuat Keyboard Pilihan Site jika Ditemukan Banyak Hasil (Fuzzy Search)
@@ -78,10 +117,10 @@ function createBot() {
         title = title.substring(0, 34) + '..';
       }
 
-      kb.text(title, `p:${item.target}:${item.id}`).row();
+      kb.text(title, `p:${item.target}:${item.id}`).primary().row();
     });
 
-    kb.text('❌ Tutup Pilihan', 'cancel_picker');
+    kb.text('❌ Tutup Pilihan', 'cancel_picker').danger();
     return kb;
   }
 
@@ -111,15 +150,15 @@ function createBot() {
     });
   }
 
-  // Helper tombol Panel Admin
+  // Helper tombol Panel Admin dengan Warna
   function createAdminKeyboard() {
     return new InlineKeyboard()
-      .text('🔄 Sync Witel ➔ TSEL', 'adm_sync_witel')
+      .text('🔄 Sync Witel ➔ TSEL', 'adm_sync_witel').success()
       .row()
-      .text('📥 Sync Seluruh Google Sheet', 'adm_sync_all')
+      .text('📥 Sync Seluruh Google Sheet', 'adm_sync_all').primary()
       .row()
-      .text('📊 Refresh Statistik', 'adm_refresh_stats')
-      .text('📜 5 Log Terakhir', 'adm_recent_logs');
+      .text('📊 Refresh Statistik', 'adm_refresh_stats').primary()
+      .text('📜 5 Log Terakhir', 'adm_recent_logs').primary();
   }
 
   // Middleware Logging Semua Pesan Masuk
@@ -145,10 +184,19 @@ function createBot() {
 
     const kb = new InlineKeyboard();
     if (userIsAdmin) {
-      kb.text('👑 Buka Panel Admin', 'adm_open_panel').row();
+      kb.text('👑 Buka Panel Admin', 'adm_open_panel').primary().row();
     }
-    kb.text('📊 Status Database', 'show_db_status');
-    kb.url('💬 Hubungi Admin', 'https://t.me/Vandiza');
+    kb.text('🛰️ Radar Sekitar Saya', 'ask_radar_location').success().row();
+    kb.text('📊 Status Database', 'show_db_status').primary();
+    kb.url('💬 Hubungi Admin', 'https://t.me/Vandiza').primary();
+
+    // Menu Tombol Bawah (Reply Keyboard Berwarna seperti bot modern)
+    const replyKb = new Keyboard()
+      .text('🛰️ Radar Sekitar').success()
+      .text('📊 Status Database').primary()
+      .row()
+      .text('ℹ️ Bantuan').primary()
+      .resized();
 
     await ctx.reply(formatStartHelp(firstName, userIsAdmin), {
       parse_mode: 'HTML',
@@ -313,6 +361,81 @@ function createBot() {
     });
   });
 
+  // /radar & /nearby (Radar Spasial GPS)
+  bot.command(['radar', 'nearby'], async (ctx) => {
+    const match = (ctx.match || '').trim();
+
+    // Jika user memberikan koordinat langsung: /radar -6.2919, 107.0540
+    if (match) {
+      const coords = parseCoordinates(match);
+      if (coords) {
+        await ctx.reply('🛰️ <b>Memindai Radar GPS...</b>\nMencari site dan ODC terdekat dalam radius...', {
+          parse_mode: 'HTML',
+        });
+        const res = await searchNearby(coords.lat, coords.lon || coords.long);
+        if (!res.success) {
+          return ctx.reply(res.message || 'Gagal memproses radar spasial.');
+        }
+        const message = formatNearbyRadar(res.lat, res.lon, res.sites, res.odcs);
+        const kb = createNearbyKeyboard(res.lat, res.lon, res.sites, res.odcs);
+        return ctx.reply(message, {
+          parse_mode: 'HTML',
+          link_preview_options: { is_disabled: true },
+          reply_markup: kb,
+        });
+      }
+    }
+
+    // Jika tanpa parameter koordinat, tampilkan tombol minta lokasi dengan warna Hijau (Success)
+    const replyKb = new Keyboard()
+      .requestLocation('📍 Kirim Titik GPS Saya').success()
+      .resized()
+      .oneTime();
+
+    await ctx.reply(
+      `🛰️ <b>RADAR SPASIAL INFRASTRUKTUR</b>\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Fitur ini memindai seluruh <b>Site TSEL, FSI, UMT, MTEL, OLO, dan ODC</b> terdekat dari posisi Anda.\n\n` +
+      `<b>Cara Penggunaan:</b>\n` +
+      `1. Ketuk tombol <b>"📍 Kirim Titik GPS Saya"</b> di bawah.\n` +
+      `2. Atau kirimkan Pin Lokasi dari menu lampiran (📎) Telegram.\n` +
+      `3. Atau ketik koordinat langsung, contoh: <code>/radar -6.2919, 107.0540</code>`,
+      {
+        parse_mode: 'HTML',
+        reply_markup: replyKb,
+      }
+    );
+  });
+
+  // Handler Pesan Lokasi (Native Location Sharing / Pin Point)
+  bot.on('message:location', async (ctx) => {
+    const loc = ctx.message.location;
+    if (!loc) return;
+
+    await ctx.reply('🛰️ <b>Memindai Radar GPS...</b>\nMencari site dan ODC terdekat dari posisi Anda...', {
+      parse_mode: 'HTML',
+    });
+
+    try {
+      const res = await searchNearby(loc.latitude, loc.longitude);
+      if (!res.success) {
+        return ctx.reply(res.message || 'Gagal memproses radar spasial.');
+      }
+
+      const message = formatNearbyRadar(res.lat, res.lon, res.sites, res.odcs);
+      const kb = createNearbyKeyboard(res.lat, res.lon, res.sites, res.odcs);
+
+      await ctx.reply(message, {
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+        reply_markup: kb,
+      });
+    } catch (err) {
+      console.error('Error on message:location:', err);
+      await ctx.reply('Terjadi kesalahan saat memproses titik lokasi.');
+    }
+  });
+
   // Callback Query Handling (Tombol Inline)
   bot.on('callback_query:data', async (ctx) => {
     const data = ctx.callbackQuery.data;
@@ -362,6 +485,23 @@ function createBot() {
         parse_mode: 'HTML',
         link_preview_options: { is_disabled: true },
       });
+    }
+
+    // Aksi Klik Radar dari Menu /start
+    if (data === 'ask_radar_location') {
+      await ctx.answerCallbackQuery();
+      const replyKb = new Keyboard()
+        .requestLocation('📍 Kirim Titik GPS Saya').success()
+        .resized()
+        .oneTime();
+
+      return ctx.reply(
+        '🛰️ <b>Ketuk tombol "📍 Kirim Titik GPS Saya" di bawah</b> untuk memindai seluruh site & ODC di sekitar lokasi Anda saat ini:',
+        {
+          parse_mode: 'HTML',
+          reply_markup: replyKb,
+        }
+      );
     }
 
     // Aksi Tampilkan Status Database
@@ -457,10 +597,71 @@ function createBot() {
     await ctx.reply(`Perintah '${command}' tidak dikenali.\nGunakan /help.`);
   });
 
-  // Default Pencarian Global (Pesan Biasa / Non-Command)
+  // Default Pencarian Global & Auto-Detect Koordinat GPS
   bot.on('message:text', async (ctx) => {
     const text = ctx.message.text.trim();
     if (!text || text.startsWith('/')) return;
+
+    // Shortcut dari Reply Keyboard Bawah (Berwarna)
+    if (text === '🛰️ Radar Sekitar') {
+      const replyKb = new Keyboard()
+        .requestLocation('📍 Kirim Titik GPS Saya').success()
+        .resized()
+        .oneTime();
+      return ctx.reply('🛰️ <b>Ketuk tombol hijau di bawah</b> untuk memindai titik lokasi GPS Anda saat ini:', {
+        parse_mode: 'HTML',
+        reply_markup: replyKb,
+      });
+    }
+
+    if (text === '📊 Status Database') {
+      const stats = await getStats();
+      const totalData = Number(stats.tsel) + Number(stats.fsi) + Number(stats.umt) + Number(stats.mtel) + Number(stats.olo);
+      return ctx.reply(
+        `📊 <b>[ STATUS DATABASE TERHUBUNG ]</b>\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `• 🔴 <b>TSEL Sites :</b> <code>${stats.tsel}</code> record\n` +
+        `• 🟠 <b>FSI Sites  :</b> <code>${stats.fsi}</code> record\n` +
+        `• 🟡 <b>UMT Sites  :</b> <code>${stats.umt}</code> record\n` +
+        `• 🟢 <b>MTEL Sites :</b> <code>${stats.mtel}</code> record\n` +
+        `• 🔵 <b>OLO Sites  :</b> <code>${stats.olo}</code> record\n` +
+        `━━━━━━━━━━━━━━━━━━━━\n` +
+        `📈 <b>Total Infrastruktur:</b> <code>${totalData}</code> site aktif.\n` +
+        `<i>Data tersimpan aman di PostgreSQL Supabase Cloud.</i>`,
+        { parse_mode: 'HTML' }
+      );
+    }
+
+    if (text === 'ℹ️ Bantuan') {
+      const userIsAdmin = isAdmin(ctx.from?.id);
+      const firstName = ctx.from?.first_name || 'Rekan';
+      return ctx.reply(formatStartHelp(firstName, userIsAdmin), {
+        parse_mode: 'HTML',
+        link_preview_options: { is_disabled: true },
+      });
+    }
+
+    // Cek apakah teks berupa Koordinat GPS (contoh: -6.2919, 107.0540)
+    const coords = parseCoordinates(text);
+    if (coords && coords.lat >= -90 && coords.lat <= 90 && coords.lon >= -180 && coords.lon <= 180) {
+      await ctx.reply('🛰️ <b>Koordinat GPS Terdeteksi!</b>\nMemindai radar infrastruktur terdekat...', {
+        parse_mode: 'HTML',
+      });
+      try {
+        const res = await searchNearby(coords.lat, coords.lon || coords.long);
+        if (res.success) {
+          const message = formatNearbyRadar(res.lat, res.lon, res.sites, res.odcs);
+          const kb = createNearbyKeyboard(res.lat, res.lon, res.sites, res.odcs);
+          return ctx.reply(message, {
+            parse_mode: 'HTML',
+            link_preview_options: { is_disabled: true },
+            reply_markup: kb,
+          });
+        }
+      } catch (err) {
+        console.error('Error on auto GPS search:', err);
+      }
+    }
 
     try {
       const res = await searchGlobal(text);

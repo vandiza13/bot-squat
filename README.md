@@ -7,15 +7,20 @@ Migrasi dari Google Apps Script ke **Node.js** menggunakan **GrammY** (Telegram 
 ## 🌟 Fitur Utama
 - **Kecepatan Tinggi & Performa SQL**: Data disimpan dalam tabel PostgreSQL berindeks (`fsi`, `umt`, `mtel`, `tsel`, `olo`, `logs`).
 - **100% Format Paritas**: Format pesan HTML, template detail site, emoji, dan footer persis sama dengan versi Google Apps Script asli.
-- **Kirim Lokasi Telegram Otomatis**: Jika data memiliki koordinat Latitude & Longitude, bot otomatis mengirim pin lokasi interaktif ke chat Telegram.
+- **Radar Spasial GPS & Nearby Infrastructure (`/radar` / `/nearby`)**:
+  - Kirim titik lokasi / GPS pin langsung di Telegram atau ketik koordinat (misal: `<code>-6.2919, 107.0540</code>`).
+  - Bot secara otomatis memindai dan menghitung jarak (Haversine formula) ke **5 Site dan 3 ODC terdekat** dalam hitungan milidetik.
+  - Dilengkapi tombol navigasi instan ke **Google Maps**.
+- **100% Modern Card & Tree Layout**: Format pesan HTML baru dengan struktur ranting pohon (`┌ ├ └`), blok identitas `<blockquote>`, keterangan terlipat (`<blockquote expandable>`), dan fitur *1-Tap to Copy* pada seluruh parameter teknis.
 - **Pencarian Fleksibel**:
+  - `/radar [Lat, Long]` - Radar pemindai site & ODC terdekat dari posisi GPS
   - `/fsi [ID/Nama Site]` - Pencarian database FSI
   - `/umt [ID/Nama Site]` - Pencarian database UMT (+ link KMZ)
   - `/mtel [ID/Nama Site]` - Pencarian database MTEL
   - `/tsel [ID/Nama Site]` - Pencarian identitas site TSEL (27 atribut lengkap)
   - `/olo [ID/Nama/Cust Name]` - Pencarian data OLO (SID, ISP, Customer)
   - `/odc [Nama ODC]` - Pengecekan isi ODC lintas TSEL & OLO
-  - **Pencarian Global Otomatis**: Ketik langsung ID / Nama Site tanpa slash command, bot akan mencari di semua database secara berurutan.
+  - **Pencarian Global Otomatis**: Ketik langsung ID / Nama Site atau koordinat GPS tanpa slash command, bot akan mencari di semua database secara cerdas.
 - **Pencatatan Log Aktivitas**: Semua pesan dan command tercatat ke tabel `logs` di PostgreSQL secara non-blocking (asinkron).
 - **Sinkronisasi Dinamis (`/sync`)**: Mendukung sinkronisasi/upsert data BTS Witel Bekasi ke TSEL dengan pemetaan kolom dinamis (kebal pergeseran urutan kolom).
 - **Import Utility**: Tersedia script untuk mengimpor CSV lokal dan sinkronisasi langsung dari Google Sheets.

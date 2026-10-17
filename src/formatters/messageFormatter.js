@@ -8,14 +8,30 @@ function escapeHtml(text) {
     .replace(/"/g, "&quot;");
 }
 
-function parseCoordinates(rawString) {
-  if (!rawString) return null;
-  const parts = rawString.toString().split(",");
-  if (parts.length === 2) {
-    const lat = parseFloat(parts[0].trim());
-    const long = parseFloat(parts[1].trim());
-    if (!isNaN(lat) && !isNaN(long)) {
-      return { lat, long };
+function parseCoordinates(rawInput) {
+  if (!rawInput) return null;
+  if (typeof rawInput === 'object') {
+    const lat = parseFloat(rawInput.lat || rawInput.latitude);
+    const lon = parseFloat(rawInput.lon || rawInput.long || rawInput.longitude);
+    if (!isNaN(lat) && !isNaN(lon)) return { lat, long: lon, lon };
+  }
+  const str = rawInput.toString().trim();
+  if (str.includes(',')) {
+    const parts = str.split(',');
+    if (parts.length === 2) {
+      const lat = parseFloat(parts[0].trim());
+      const long = parseFloat(parts[1].trim());
+      if (!isNaN(lat) && !isNaN(long) && lat >= -90 && lat <= 90 && long >= -180 && long <= 180) {
+        return { lat, long, lon: long };
+      }
+    }
+  }
+  const spaceParts = str.split(/\s+/);
+  if (spaceParts.length === 2) {
+    const lat = parseFloat(spaceParts[0]);
+    const long = parseFloat(spaceParts[1]);
+    if (!isNaN(lat) && !isNaN(long) && lat >= -90 && lat <= 90 && long >= -180 && long <= 180) {
+      return { lat, long, lon: long };
     }
   }
   return null;
@@ -59,9 +75,10 @@ function formatStartHelp(userName = "Rekan", isAdminUser = false) {
     `├ 🟡 <b>UMT</b>  ➔ <code>/umt [ID / Nama Site]</code>\n` +
     `├ 🟢 <b>MTEL</b> ➔ <code>/mtel [ID / Nama Site]</code>\n` +
     `├ 🔵 <b>OLO</b>  ➔ <code>/olo [SID / Cust Name]</code>\n` +
-    `└ 🟣 <b>ODC</b>  ➔ <code>/odc [Nama ODC]</code>\n\n` +
+    `├ 🟣 <b>ODC</b>  ➔ <code>/odc [Nama ODC]</code>\n` +
+    `└ 🛰️ <b>RADAR</b>➔ <code>/radar</code> <i>(Kirim Pin Lokasi GPS)</i>\n\n` +
     `⚡ <b>Pencarian Cepat (Global):</b>\n` +
-    `<blockquote>Ketik langsung ID atau Nama Site (contoh: <code>BKX253</code>) tanpa garis miring. Sistem akan otomatis memindai seluruh database secara presisi.</blockquote>\n\n`;
+    `<blockquote>Ketik langsung ID / Nama Site atau koordinat GPS (contoh: <code>BKX253</code> atau <code>-6.2919, 107.0540</code>). Sistem otomatis memindai seluruh database.</blockquote>\n\n`;
 
   if (isAdminUser) {
     msg += 
@@ -316,6 +333,61 @@ function formatMultipleSearchResults(keyword, items, totalCount) {
   );
 }
 
+function formatNearbyRadar(lat, lon, sites = [], odcs = []) {
+  const badges = {
+    TSEL: '🔴',
+    FSI: '🟠',
+    UMT: '🟡',
+    MTEL: '🟢',
+    OLO: '🔵',
+  };
+
+  let siteText = '<i>Tidak ada site yang terdeteksi di sekitar titik ini.</i>';
+  if (sites.length > 0) {
+    siteText = sites
+      .map((s, idx) => {
+        const badge = badges[s.target] || '⚪';
+        const dist = parseFloat(s.distance_m);
+        const distFormatted = dist < 1000
+          ? `<b>${Math.round(dist)} m</b>`
+          : `<b>${(dist / 1000).toFixed(2)} km</b>`;
+        const odcPart = s.odc && s.odc !== '-' ? ` | ODC: <code>${escapeHtml(s.odc)}</code>` : '';
+
+        return (
+          `<b>${idx + 1}.</b> ${badge} [${s.target}] <code>${escapeHtml(s.site_id)}</code>\n` +
+          `   ├ 🏷️ <i>${escapeHtml(s.site_name || '-')}</i>\n` +
+          `   ├ 📏 Jarak: ${distFormatted}\n` +
+          `   └ 🏢 STO: <code>${escapeHtml(s.sto || '-')}</code>${odcPart}`
+        );
+      })
+      .join('\n\n');
+  }
+
+  let odcText = '<i>Tidak ada ODC terdaftar di sekitar titik ini.</i>';
+  if (odcs.length > 0) {
+    odcText = odcs
+      .map((o) => {
+        const dist = parseFloat(o.distance_m);
+        const distFormatted = dist < 1000
+          ? `<b>${Math.round(dist)} m</b>`
+          : `<b>${(dist / 1000).toFixed(2)} km</b>`;
+        return `• 📦 <code>${escapeHtml(o.odc_name)}</code> ➔ 📏 ${distFormatted} (STO <code>${escapeHtml(o.sto || '-')}</code>)`;
+      })
+      .join('\n');
+  }
+
+  return (
+    `🛰️ <b>RADAR INFRASTRUKTUR SEKITAR</b>\n` +
+    `<blockquote>📍 <b>Titik Koordinat:</b> <code>${lat}, ${lon}</code>\n` +
+    `🎯 <b>Pemindaian:</b> Top ${sites.length} Site & ${odcs.length} ODC Terdekat</blockquote>\n\n` +
+    `🏢 <b>SITE TERDEKAT DI SEKITAR ANDA:</b>\n` +
+    `${siteText}\n\n` +
+    `🎛️ <b>ODC TERDEKAT:</b>\n` +
+    `${odcText}\n\n` +
+    `💡 <i>Klik tombol di bawah untuk melihat rincian data atau navigasi GPS:</i>`
+  );
+}
+
 module.exports = {
   escapeHtml,
   parseCoordinates,
@@ -330,5 +402,6 @@ module.exports = {
   formatTSEL,
   formatOLO,
   formatODC,
+  formatNearbyRadar,
 };
 

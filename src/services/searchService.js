@@ -295,6 +295,118 @@ async function searchODC(rawQuery) {
   return formatODC(query, tselRows, oloRows);
 }
 
+/**
+ * Radar Spasial GPS: Mencari Site & ODC terdekat berdasarkan koordinat pengguna
+ */
+async function searchNearby(lat, lon, limitSites = 5, limitOdc = 3) {
+  const latitude = parseFloat(lat);
+  const longitude = parseFloat(lon);
+
+  if (isNaN(latitude) || isNaN(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return {
+      success: false,
+      message: 'Koordinat GPS tidak valid. Pastikan format: <code>-6.2919, 107.0540</code>',
+      sites: [],
+      odcs: [],
+    };
+  }
+
+  const siteSql = `
+    WITH all_sites AS (
+      SELECT 'TSEL' as target, id::text, site_id, site_name, latitude::float as lat, longitude::float as lon, sto, site_name_odc as odc
+      FROM tsel_sites WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+      UNION ALL
+      SELECT 'FSI' as target, id::text, site_id, site_name, latitude::float as lat, longitude::float as lon, sto, '-' as odc
+      FROM fsi_sites WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+      UNION ALL
+      SELECT 'UMT' as target, id::text, site_id, site_name, latitude::float as lat, longitude::float as lon, sto, '-' as odc
+      FROM umt_sites WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+      UNION ALL
+      SELECT 'MTEL' as target, id::text, site_id, site_name, latitude::float as lat, longitude::float as lon, sto, '-' as odc
+      FROM mtel_sites WHERE latitude IS NOT NULL AND longitude IS NOT NULL
+      UNION ALL
+      SELECT 
+        'OLO' as target, id::text, sid as site_id, COALESCE(cust_name, isp_name, sid) as site_name,
+        split_part(lokasi, ',', 1)::float as lat, split_part(lokasi, ',', 2)::float as lon, sto, odc
+      FROM olo
+      WHERE lokasi IS NOT NULL 
+        AND lokasi LIKE '%,%'
+        AND TRIM(split_part(lokasi, ',', 1)) ~ '^-?[0-9]+(\\.[0-9]+)?$'
+        AND TRIM(split_part(lokasi, ',', 2)) ~ '^-?[0-9]+(\\.[0-9]+)?$'
+    )
+    SELECT 
+      target,
+      id,
+      site_id,
+      site_name,
+      lat,
+      lon,
+      sto,
+      odc,
+      ROUND((
+        6371000 * acos(
+          least(1.0, greatest(-1.0,
+            cos(radians($1)) * cos(radians(lat)) *
+            cos(radians(lon) - radians($2)) +
+            sin(radians($1)) * sin(radians(lat))
+          ))
+        )
+      )::numeric, 1) AS distance_m
+    FROM all_sites
+    ORDER BY distance_m ASC
+    LIMIT $3;
+  `;
+
+  const odcSql = `
+    SELECT 
+      site_name_odc as odc_name,
+      sto,
+      latitude_odc::float as lat,
+      longitude_odc::float as lon,
+      COUNT(site_id) as total_sites,
+      ROUND((
+        6371000 * acos(
+          least(1.0, greatest(-1.0,
+            cos(radians($1)) * cos(radians(latitude_odc::float)) *
+            cos(radians(longitude_odc::float) - radians($2)) +
+            sin(radians($1)) * sin(radians(latitude_odc::float))
+          ))
+        )
+      )::numeric, 1) AS distance_m
+    FROM tsel_sites
+    WHERE latitude_odc IS NOT NULL 
+      AND longitude_odc IS NOT NULL
+      AND site_name_odc IS NOT NULL
+      AND site_name_odc != '-'
+    GROUP BY site_name_odc, sto, latitude_odc, longitude_odc
+    ORDER BY distance_m ASC
+    LIMIT $3;
+  `;
+
+  try {
+    const [sitesRes, odcsRes] = await Promise.all([
+      db.query(siteSql, [latitude, longitude, limitSites]),
+      db.query(odcSql, [latitude, longitude, limitOdc]),
+    ]);
+
+    return {
+      success: true,
+      lat: latitude,
+      lon: longitude,
+      sites: sitesRes.rows,
+      odcs: odcsRes.rows,
+    };
+  } catch (err) {
+    console.error('Error in searchNearby:', err);
+    return {
+      success: false,
+      message: 'Gagal memproses kueri radar spasial.',
+      sites: [],
+      odcs: [],
+    };
+  }
+}
+
 module.exports = {
   fetchSiteById,
   searchUniversal,
@@ -305,4 +417,5 @@ module.exports = {
   searchOLO,
   searchODC,
   searchGlobal,
+  searchNearby,
 };
