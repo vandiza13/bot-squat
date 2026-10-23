@@ -34,6 +34,7 @@ async function fetchSiteById(target, id) {
           found: true,
           type: 'SINGLE',
           dbTarget: 'TSEL',
+          siteId: row.site_id,
           message: formatTSEL(row),
           lokasi: getLokasiString(row),
           lokasiOdc: getLokasiOdcString(row),
@@ -407,8 +408,34 @@ async function searchNearby(lat, lon, limitSites = 5, limitOdc = 3) {
   }
 }
 
+/**
+ * Mengambil baris data mentah satu site (untuk template koreksi data)
+ */
+async function getSiteRawData(siteId, target = 'TSEL') {
+  const cleanId = (siteId || '').trim();
+  if (!cleanId) return null;
+
+  try {
+    let res = await db.query(
+      'SELECT * FROM tsel_sites WHERE LOWER(site_id) = LOWER($1) LIMIT 1',
+      [cleanId]
+    );
+    if (res.rows.length === 0) {
+      res = await db.query(
+        'SELECT * FROM tsel WHERE LOWER(site_id) = LOWER($1) LIMIT 1',
+        [cleanId]
+      );
+    }
+    return res.rows[0] || null;
+  } catch (err) {
+    console.error('Error getSiteRawData:', err);
+    return null;
+  }
+}
+
 module.exports = {
   fetchSiteById,
+  getSiteRawData,
   searchUniversal,
   searchFSI,
   searchUMT,

@@ -124,3 +124,27 @@ CREATE TABLE IF NOT EXISTS logs (
 );
 CREATE INDEX IF NOT EXISTS idx_logs_chat_id ON logs (chat_id);
 CREATE INDEX IF NOT EXISTS idx_logs_waktu ON logs (waktu DESC);
+
+-- 7. TABEL DATA_CORRECTIONS (Tiket Usulan Koreksi Data Lapangan)
+CREATE TABLE IF NOT EXISTS data_corrections (
+    id SERIAL PRIMARY KEY,
+    ticket_no VARCHAR(50) UNIQUE NOT NULL,
+    target_table VARCHAR(50) DEFAULT 'tsel',
+    site_id VARCHAR(100) NOT NULL,
+    site_name VARCHAR(255),
+    reporter_id VARCHAR(50) NOT NULL,
+    reporter_username VARCHAR(100),
+    reporter_name VARCHAR(200),
+    old_data JSONB NOT NULL,
+    new_data JSONB NOT NULL,
+    notes TEXT,
+    status VARCHAR(20) DEFAULT 'PENDING',
+    reviewed_by VARCHAR(50),
+    reviewed_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_corr_status ON data_corrections (status);
+CREATE INDEX IF NOT EXISTS idx_corr_site_id ON data_corrections (site_id);
+CREATE INDEX IF NOT EXISTS idx_corr_ticket_no ON data_corrections (ticket_no);
+

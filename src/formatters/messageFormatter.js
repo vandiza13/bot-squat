@@ -261,6 +261,8 @@ function formatTSEL(row) {
 ========================
 <i>${sKet}</i>
 
+💡 <i>Jika ada perubahan data dan ketidak sesuaian data silahkan koreksi dengan tekan tombol koreksi data</i>
+
 🛡️ Powered by Vandiza`;
 }
 
@@ -388,6 +390,62 @@ function formatNearbyRadar(lat, lon, sites = [], odcs = []) {
   );
 }
 
+function formatCorrectionDiff(changes = [], notes = '') {
+  let text = '';
+  changes.forEach((item, index) => {
+    text += `${index + 1}. <b>${escapeHtml(item.label || item.field)}</b>\n`;
+    text += `   🔴 <i>Lama</i> : <code>${escapeHtml(item.oldValue || '-')}</code>\n`;
+    text += `   🟢 <i>Baru</i> : <code>${escapeHtml(item.newValue || '-')}</code>\n\n`;
+  });
+
+  if (notes && notes.trim() !== '-' && notes.trim() !== '') {
+    text += `💬 <b>Catatan / Alasan:</b>\n<i>${escapeHtml(notes)}</i>\n`;
+  }
+  return text.trim();
+}
+
+function formatAdminCorrectionReview(ticket, isEditedByAdmin = false) {
+  const oldData = ticket.old_data || {};
+  const newData = ticket.new_data || {};
+  const entries = Object.entries(newData);
+
+  const statusTitle = isEditedByAdmin
+    ? `📬 <b>[ USULAN KOREKSI DATA (DIEDIT ADMIN) ]</b>`
+    : `📬 <b>[ USULAN KOREKSI DATA BARU ]</b>`;
+
+  let diffText = '';
+  entries.forEach(([col, newVal], idx) => {
+    const oldVal = oldData[col] || '-';
+    diffText += `${idx + 1}. <b>${escapeHtml(col.toUpperCase())}</b>\n`;
+    diffText += `   🔴 <i>Lama</i> : <code>${escapeHtml(oldVal)}</code>\n`;
+    diffText += `   🟢 <i>Baru</i> : <code>${escapeHtml(newVal)}</code>\n\n`;
+  });
+
+  const reporter = ticket.reporter_username
+    ? `@${escapeHtml(ticket.reporter_username)}`
+    : escapeHtml(ticket.reporter_name || `ID: ${ticket.reporter_id}`);
+
+  const waktu = ticket.created_at
+    ? new Date(ticket.created_at).toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
+    : '-';
+
+  return (
+    `${statusTitle}\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `<b>Tiket</b>    : <code>#${escapeHtml(ticket.ticket_no)}</code>\n` +
+    `<b>Site ID</b>  : <code>${escapeHtml(ticket.site_id)}</code>\n` +
+    `<b>Tabel</b>    : <code>${escapeHtml((ticket.target_table || 'TSEL').toUpperCase())}</code>\n` +
+    `<b>Pelapor</b>  : ${reporter} (<code>${escapeHtml(ticket.reporter_id)}</code>)\n` +
+    `<b>Waktu</b>    : <code>${waktu} WIB</code>\n\n` +
+    `📋 <b>Rincian Perubahan (${entries.length} Data):</b>\n` +
+    `${diffText}` +
+    `💬 <b>Catatan:</b>\n` +
+    `<i>${escapeHtml(ticket.notes || '-')}</i>\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `<i>Admin dapat langsung menyetujui, mengedit data usulan terlebih dahulu, atau menolak usulan ini:</i>`
+  );
+}
+
 module.exports = {
   escapeHtml,
   parseCoordinates,
@@ -403,5 +461,8 @@ module.exports = {
   formatOLO,
   formatODC,
   formatNearbyRadar,
+  formatCorrectionDiff,
+  formatAdminCorrectionReview,
 };
+
 
