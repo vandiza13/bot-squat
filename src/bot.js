@@ -771,6 +771,14 @@ function createBot() {
             );
           } catch (e) {}
 
+          // Bersihkan seluruh sesi aktif pelapor maupun admin agar chat langsung normal kembali
+          activeCorrectionSessions.delete(userId);
+          adminEditSessions.delete(userId);
+          if (res.ticket && res.ticket.reporter_id) {
+            activeCorrectionSessions.delete(Number(res.ticket.reporter_id));
+            activeCorrectionSessions.delete(String(res.ticket.reporter_id));
+          }
+
           // Notifikasi ke Pelapor (Teknisi)
           if (res.ticket.reporter_id) {
             try {
@@ -857,6 +865,14 @@ function createBot() {
               { parse_mode: 'HTML' }
             );
           } catch (e) {}
+
+          // Bersihkan seluruh sesi aktif pelapor maupun admin
+          activeCorrectionSessions.delete(userId);
+          adminEditSessions.delete(userId);
+          if (res.ticket && res.ticket.reporter_id) {
+            activeCorrectionSessions.delete(Number(res.ticket.reporter_id));
+            activeCorrectionSessions.delete(String(res.ticket.reporter_id));
+          }
 
           // Notifikasi ke Pelapor (Teknisi)
           if (res.ticket.reporter_id) {
@@ -982,41 +998,60 @@ function createBot() {
     // 2. Cek apakah Teknisi sedang dalam sesi Pengisian Koreksi Data
     if (activeCorrectionSessions.has(ctx.from.id)) {
       const session = activeCorrectionSessions.get(ctx.from.id);
-      if (session.step === 'WAITING_INPUT') {
-        const parsed = parseCorrectionInput(text, session.siteData);
+      const parsed = parseCorrectionInput(text, session.siteData);
 
-        if (!parsed.hasChanges) {
-          return ctx.reply(
-            '⚠️ <b>Tidak ada perubahan data yang terdeteksi.</b>\n' +
-            'Pastikan Anda telah mengubah nilai parameter dari data lama di database.\n' +
-            '<i>Ketik /batal jika ingin membatalkan.</i>',
-            { parse_mode: 'HTML' }
-          );
-        }
-
-        session.pendingResult = parsed;
-        session.step = 'WAITING_CONFIRMATION';
-
-        const diffText = formatCorrectionDiff(parsed.changes, parsed.notes);
-        const confirmKb = new InlineKeyboard()
-          .text('🚀 Kirim ke Admin', 'kor_submit').success()
-          .row()
-          .text('❌ Batalkan', 'kor_cancel').danger();
-
+      if (!parsed.hasChanges) {
         return ctx.reply(
-          `🔍 <b>RINGKASAN USULAN KOREKSI (Site: <code>${escapeHtml(session.siteId)}</code>)</b>\n` +
-          `━━━━━━━━━━━━━━━━━━━━\n` +
-          `Ditemukan <b>${parsed.changes.length} data</b> yang akan diusulkan:\n\n` +
-          `${diffText}\n\n` +
-          `━━━━━━━━━━━━━━━━━━━━\n` +
-          `Apakah Anda yakin ingin mengirimkan usulan ini ke Admin untuk di-review?`,
-          {
-            parse_mode: 'HTML',
-            reply_markup: confirmKb,
-            link_preview_options: { is_disabled: true },
-          }
+          '⚠️ <b>Tidak ada perubahan data yang terdeteksi.</b>\n' +
+          'Pastikan Anda telah mengubah nilai parameter dari data lama di database.\n' +
+          '<i>Ketik /batal jika ingin membatalkan.</i>',
+          { parse_mode: 'HTML' }
         );
       }
+
+      // Langsung hapus sesi teknisi saat data dikirim, sehingga chat langsung normal kembali tanpa perlu /batal
+      activeCorrectionSessions.delete(ctx.from.id);
+
+      const from = ctx.from;
+      const reporterUsername = from.username || '';
+      const reporterName = [from.first_name, from.last_name].filter(Boolean).join(' ') || from.first_name || 'Teknisi';
+
+      try {
+        const ticket = await createCorrectionTicket({
+          targetTable: 'tsel_sites',
+          siteId: session.siteId,
+          siteName: session.siteData.site_name || '-',
+          reporterId: ctx.from.id,
+          reporterUsername,
+          reporterName,
+          oldData: parsed.oldData,
+          newData: parsed.newData,
+          notes: parsed.notes || '',
+        });
+
+        const diffText = formatCorrectionDiff(parsed.changes, parsed.notes);
+
+        // Balas langsung ke teknisi bahwa data telah terkirim ke admin dan proses koreksi selesai
+        await ctx.reply(
+          `✅ <b>USULAN KOREKSI BERHASIL DIKIRIM KE ADMIN</b>\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `• <b>Nomor Tiket :</b> <code>#${ticket.ticket_no}</code>\n` +
+          `• <b>Site ID     :</b> <code>${escapeHtml(ticket.site_id)}</code>\n` +
+          `• <b>Status      :</b> 🟡 <i>Menunggu Review Admin</i>\n\n` +
+          `📋 <b>Rincian Perubahan (${parsed.changes.length} Data):</b>\n` +
+          `${diffText}\n` +
+          `━━━━━━━━━━━━━━━━━━━━\n` +
+          `<i>Data telah diteruskan ke Admin untuk diverifikasi. Sesi koreksi telah selesai dan chat Anda kembali normal. 🛡️</i>`,
+          { parse_mode: 'HTML' }
+        );
+
+        // Teruskan tiket ke seluruh admin
+        await broadcastTicketToAdmins(ticket);
+      } catch (err) {
+        console.error('Error creating correction ticket directly:', err);
+        return ctx.reply('❌ Terjadi kesalahan saat mengirim tiket koreksi ke admin.');
+      }
+      return;
     }
 
     // Shortcut dari Reply Keyboard Bawah (Berwarna)
