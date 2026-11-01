@@ -954,8 +954,10 @@ function createBot() {
     }
   });
 
-  // Handle Command Lain yang Tidak Dikenal
+  // Handle Command Lain yang Tidak Dikenal (Hanya dijawab di Private Chat agar tidak spam di grup)
   bot.hears(/^\/([a-zA-Z0-9_]+)/, async (ctx) => {
+    if (ctx.chat.type !== 'private') return;
+
     const command = ctx.match[0];
     await ctx.reply(`Perintah '${command}' tidak dikenali.\nGunakan /help.`);
   });
